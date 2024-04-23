@@ -1,26 +1,29 @@
 import {
+  AnyObject,
   Filter,
   FilterExcludingWhere,
   repository
 } from '@loopback/repository';
 import {
-  del,
   get,
   getModelSchemaRef,
   param,
   patch,
   post,
-  put,
   requestBody,
-  response,
+  response
 } from '@loopback/rest';
 import {Company} from '../models';
-import {CompanyRepository} from '../repositories';
+import {CompanyRepository, CountryRepository, UserRepository} from '../repositories';
 
 export class CompanyController {
   constructor(
     @repository(CompanyRepository)
     public companyRepository: CompanyRepository,
+    @repository(UserRepository)
+    public userRepository: UserRepository,
+    @repository(CountryRepository)
+    public countryRepository: CountryRepository,
   ) { }
 
   @post('/companies')
@@ -44,17 +47,8 @@ export class CompanyController {
     return this.companyRepository.create(company);
   }
 
-  // @get('/companies/count')
-  // @response(200, {
-  //   description: 'Company model count',
-  //   content: {'application/json': {schema: CountSchema}},
-  // })
-  // async count(
-  //   @param.where(Company) where?: Where<Company>,
-  // ): Promise<Count> {
-  //   return this.companyRepository.count(where);
-  // }
 
+  // Get list company
   @get('/companies')
   @response(200, {
     description: 'Array of Company model instances',
@@ -70,7 +64,7 @@ export class CompanyController {
   async find(
     @param.filter(Company) filter?: Filter<Company>,
   ): Promise<Company[]> {
-    const filters = {...filter}
+    const filters: Filter = {...filter}
 
     filters.include = [
       {
@@ -90,25 +84,7 @@ export class CompanyController {
     return companies;
   }
 
-  // @patch('/companies')
-  // @response(200, {
-  //   description: 'Company PATCH success count',
-  //   content: {'application/json': {schema: CountSchema}},
-  // })
-  // async updateAll(
-  //   @requestBody({
-  //     content: {
-  //       'application/json': {
-  //         schema: getModelSchemaRef(Company, {partial: true}),
-  //       },
-  //     },
-  //   })
-  //   company: Company,
-  //   @param.where(Company) where?: Where<Company>,
-  // ): Promise<Count> {
-  //   return this.companyRepository.updateAll(company, where);
-  // }
-
+  // Get specific company info by id
   @get('/companies/{id}')
   @response(200, {
     description: 'Company model instance',
@@ -122,9 +98,44 @@ export class CompanyController {
     @param.path.string('id') id: string,
     @param.filter(Company, {exclude: 'where'}) filter?: FilterExcludingWhere<Company>
   ): Promise<Company> {
-    return this.companyRepository.findById(id, filter);
+    const filters: Filter = {...filter}
+
+    filters.include = [
+      {
+        relation: "userList",
+        scope: {
+          fields: {id: true, firstName: true, lastName: true, tels: true, emails: true},
+        },
+      },
+      {
+        relation: "contryInfo",
+      }
+    ]
+    return this.companyRepository.findById(id, filters);
   }
 
+  // Get numbers company employee by company id
+  @get('/companies-count-user/{id}')
+  @response(200, {
+    description: 'Company model instance',
+    content: {
+      'application/json': {
+        schema: getModelSchemaRef(Company, {includeRelations: true}),
+      },
+    },
+  })
+  async findAndCountUserByIdCompany(
+    @param.path.string('id') id: string,
+    @param.filter(Company, {exclude: 'where'}) filter?: FilterExcludingWhere<Company>
+  ): Promise<AnyObject> {
+
+    let company = await this.companyRepository.findById(id, filter);
+    const rs = {id: company.id, name: company.name, countUser: company.userIds.length};
+
+    return rs
+  }
+
+  //Update by id company
   @patch('/companies/{id}')
   @response(204, {
     description: 'Company PATCH success',
@@ -139,26 +150,30 @@ export class CompanyController {
       },
     })
     company: Company,
-  ): Promise<void> {
+  ): Promise<AnyObject> {
+
+    await this.countryRepository.findById(company?.countryId);
     await this.companyRepository.updateById(id, company);
+
+    return {message: `Update id "${id}" successful!`}
   }
 
-  @put('/companies/{id}')
-  @response(204, {
-    description: 'Company PUT success',
-  })
-  async replaceById(
-    @param.path.string('id') id: string,
-    @requestBody() company: Company,
-  ): Promise<void> {
-    await this.companyRepository.replaceById(id, company);
-  }
+  // @put('/companies/{id}')
+  // @response(204, {
+  //   description: 'Company PUT success',
+  // })
+  // async replaceById(
+  //   @param.path.string('id') id: string,
+  //   @requestBody() company: Company,
+  // ): Promise<void> {
+  //   await this.companyRepository.replaceById(id, company);
+  // }
 
-  @del('/companies/{id}')
-  @response(204, {
-    description: 'Company DELETE success',
-  })
-  async deleteById(@param.path.string('id') id: string): Promise<void> {
-    await this.companyRepository.deleteById(id);
-  }
+  // @del('/companies/{id}')
+  // @response(204, {
+  //   description: 'Company DELETE success',
+  // })
+  // async deleteById(@param.path.string('id') id: string): Promise<void> {
+  //   await this.companyRepository.deleteById(id);
+  // }
 }
